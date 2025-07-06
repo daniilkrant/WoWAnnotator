@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports: []                 # keep port 11434 internal
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+  annotator:
+    build: ./annotator
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - MODEL_NAME=qwen3:4b
+    volumes:
+      - ./tests:/workspace/tests     # read-write mount
+    depends_on:
+      - ollama
+volumes:
+  ollama_models:

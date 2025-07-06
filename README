@@ -1,0 +1,5 @@
+1) docker compose up -d --build
+2) docker compose exec ollama ollama pull qwen3:4b
+3) docker compose run --rm annotator /workspace/tests
+ 
+ docker compose run --rm --volume "~/projects/....":/workspace/tests annotator /workspace/tests
