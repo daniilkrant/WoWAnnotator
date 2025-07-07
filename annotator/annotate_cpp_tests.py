@@ -7,7 +7,11 @@ preceded by a // comment, the script asks a local Ollama model
 for "ONE concise sentence" describing what the test verifies
 and inserts that comment right above the macro invocation.
 """
-import argparse, os, pathlib, re, requests, textwrap, sys
+import argparse, os, pathlib, re, requests, textwrap, sys, time, statistics
+
+START_OVERALL = time.perf_counter()
+llm_durations = []          # one entry per test
+file_stats     = {}         # path -> [num_tests, seconds]
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 MODEL       = os.getenv("MODEL_NAME",  "qwen3:4b")
@@ -15,7 +19,7 @@ MODEL       = os.getenv("MODEL_NAME",  "qwen3:4b")
 # Regex that matches the first line of a GoogleTest macro.
 MACRO_RE = re.compile(r"""
     ^\s*                                   # optional indentation
-    (TEST|TEST_F|TEST_P|TEST_SUITE)        # macro names
+    (TEST|TEST_F|TEST_P|TEST_SUITE|TYPED_TEST)        # macro names
     \s*\(.*\)\s*                           # '(Fixture, Name)'
     (?:;)?\s*$                             # possible semicolon for TEST_SUITE
 """, re.VERBOSE)
@@ -34,6 +38,9 @@ def llm_summarise(code: str) -> str:
         "Do NOT include <think> blocks, explanations or tags \n\n"
         f"```cpp\n{code}\n```\n\n### Answer:\n"
     )
+
+    t0 = time.perf_counter()
+
     r = requests.post(
         f"{OLLAMA_HOST}/api/generate",
         json={
@@ -52,6 +59,8 @@ def llm_summarise(code: str) -> str:
     clean = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
     clean = re.sub(r"</?[^>]+>", "", clean)
     summary = " ".join(clean.strip().split())
+    
+    llm_durations.append(time.perf_counter() - t0)
     return summary
 
 def find_test_blocks(lines):
@@ -83,6 +92,8 @@ def find_test_blocks(lines):
         i += 1
 
 def annotate_file(path: pathlib.Path):
+    t_file = time.perf_counter()
+
     lines = path.read_text(encoding="utf-8").splitlines()
     added = 0
 
@@ -124,9 +135,27 @@ def annotate_file(path: pathlib.Path):
         backup = path.with_suffix(path.suffix + ".bak")
         path.rename(backup)
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print(f"✔ {added} test(s) annotated in {path}")
+        elapsed = time.perf_counter() - t_file
+        file_stats[path.name] = [added, elapsed]
+        print(f"✔ {added} test(s) annotated in {path}  ({elapsed:,.2f} s)")   
     else:
         print(f"- {path}: nothing to annotate")
+
+def collect_cpp_files(paths):
+    """Return a de-duplicated list of *.cpp files for every argument."""
+    seen = set()
+    out  = []
+    for p in paths:
+        path = pathlib.Path(p).resolve()
+        if path.is_file() and path.suffix == ".cpp":
+            if path not in seen:
+                out.append(path);  seen.add(path)
+        elif path.is_dir():
+            for f in path.rglob("*.cpp"):
+                if f not in seen:
+                    out.append(f);  seen.add(f)
+    return out
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -143,3 +172,19 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    total_time = time.perf_counter() - START_OVERALL
+    total_tests = sum(n for n, _ in file_stats.values())
+
+    if total_tests:
+        print("\n──── Benchmark ──────────────────────────────────────")
+        for fname, (n, sec) in file_stats.items():
+            print(f"  {fname:30}  {n:4} tests  {sec:7.2f} s  "
+                  f"({sec/n:5.2f} s avg)")
+
+        print("  ───────────────────────────────────────────────────")
+        print(f"  TOTAL: {total_tests} tests in {len(file_stats)} files")
+        print(f"         LLM time   : {sum(llm_durations):7.2f} s  "
+              f"(avg {statistics.mean(llm_durations):.2f} s)")
+        print(f"         Wall clock : {total_time:7.2f} s\n")
+

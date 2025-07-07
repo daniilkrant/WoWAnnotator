@@ -1,5 +1,6 @@
 1) docker compose up -d --build
 2) docker compose exec ollama ollama pull qwen3:4b
-3) docker compose run --rm annotator /workspace/tests
+3) docker compose run --rm  --volume "/home/dkrant/projects/ambition/connectivity-wifi-eap/unit-tests/":/workspace/tests annotator /workspace/tests
  
- docker compose run --rm --volume "~/projects/....":/workspace/tests annotator /workspace/tests
+TODO:
+1) add check of copyrights by simple cehcking modify date + sed to change date in copyright

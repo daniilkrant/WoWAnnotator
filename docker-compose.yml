@@ -14,8 +14,6 @@ services:
     environment:
       - OLLAMA_HOST=http://ollama:11434
       - MODEL_NAME=qwen3:4b
-    volumes:
-      - ./tests:/workspace/tests     # read-write mount
     depends_on:
       - ollama
 volumes:
