@@ -132,8 +132,6 @@ def annotate_file(path: pathlib.Path):
         added += 1
 
     if added:
-        backup = path.with_suffix(path.suffix + ".bak")
-        path.rename(backup)
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         elapsed = time.perf_counter() - t_file
         file_stats[path.name] = [added, elapsed]
